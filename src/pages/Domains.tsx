@@ -8,6 +8,8 @@ import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table/dist/es
 import { DataToolbar } from '../components/DataToolbar';
 import type { PageProps } from '../types';
 
+const DOMAINS_FILE = '/etc/postfix/virtual_mailbox_domains';
+
 export function DomainsPage({ context }: PageProps): React.JSX.Element {
   const [domains, setDomains] = React.useState<string[]>([]);
   const [search, setSearch] = React.useState('');
@@ -18,7 +20,12 @@ export function DomainsPage({ context }: PageProps): React.JSX.Element {
 
   const load = React.useCallback(async () => {
     try {
-      const output = await context.runHelper('domain-list.sh');
+      const output = await context.runCommand([
+        'bash', '-lc',
+        'if [[ -f "$1" ]]; then grep -Ev "^\\s*($|#)" "$1" | sed "s/[[:space:]]*$//"; fi',
+        '--',
+        DOMAINS_FILE
+      ], { err: 'ignore' });
       setDomains(output.split('\n').map((entry) => entry.trim()).filter(Boolean));
     } catch (error) {
       context.notify('danger', 'Failed to load domains', String(error));
@@ -35,7 +42,13 @@ export function DomainsPage({ context }: PageProps): React.JSX.Element {
 
   const addDomain = async () => {
     try {
-      await context.runHelper('domain-add.sh', [domain]);
+      await context.runCommand([
+        'bash', '-lc',
+        'touch "$1"; if grep -Fqx "$2" "$1"; then echo "Domain already exists: $2" >&2; exit 1; fi; printf "%s\\n" "$2" >> "$1"; postmap "$1"',
+        '--',
+        DOMAINS_FILE,
+        domain.trim()
+      ], { superuser: 'require', err: 'message' });
       setDomain('');
       setIsOpen(false);
       context.notify('success', `Added domain ${domain}`);
@@ -47,7 +60,13 @@ export function DomainsPage({ context }: PageProps): React.JSX.Element {
 
   const deleteDomain = async (value: string) => {
     try {
-      await context.runHelper('domain-remove.sh', [value]);
+      await context.runCommand([
+        'bash', '-lc',
+        'if [[ -f "$1" ]]; then tmp="$(mktemp)"; grep -Fvx "$2" "$1" > "$tmp" || true; mv "$tmp" "$1"; postmap "$1"; fi',
+        '--',
+        DOMAINS_FILE,
+        value
+      ], { superuser: 'require', err: 'message' });
       context.notify('success', `Deleted domain ${value}`);
       await load();
     } catch (error) {

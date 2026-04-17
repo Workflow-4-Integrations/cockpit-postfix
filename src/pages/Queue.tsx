@@ -12,6 +12,38 @@ interface QueueItem {
   size: string;
 }
 
+function parseQueue(output: string): QueueItem[] {
+  const rows: QueueItem[] = [];
+  for (const line of output.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    try {
+      const entry = JSON.parse(trimmed) as {
+        queue_id?: string;
+        sender?: string;
+        message_size?: string | number;
+        recipients?: Array<{ address?: string } | string>;
+      };
+      rows.push({
+        id: entry.queue_id || '',
+        sender: entry.sender || '',
+        size: String(entry.message_size ?? ''),
+        recipients: (entry.recipients || []).map((recipient) => {
+          if (typeof recipient === 'string') {
+            return recipient;
+          }
+          return recipient.address || '';
+        }).filter(Boolean)
+      });
+    } catch {
+      // Ignore malformed lines
+    }
+  }
+  return rows;
+}
+
 export function QueuePage({ context }: PageProps): React.JSX.Element {
   const [queue, setQueue] = React.useState<QueueItem[]>([]);
   const [search, setSearch] = React.useState('');
@@ -20,8 +52,8 @@ export function QueuePage({ context }: PageProps): React.JSX.Element {
 
   const load = React.useCallback(async () => {
     try {
-      const output = await context.runHelper('queue-list.sh');
-      setQueue(JSON.parse(output || '[]'));
+      const output = await context.runCommand(['postqueue', '-j'], { superuser: 'try', err: 'ignore' });
+      setQueue(parseQueue(output));
     } catch (error) {
       context.notify('danger', 'Failed to load queue', String(error));
     }
@@ -38,9 +70,9 @@ export function QueuePage({ context }: PageProps): React.JSX.Element {
   const start = (page - 1) * perPage;
   const rows = filtered.slice(start, start + perPage);
 
-  const queueAction = async (script: string, id: string, title: string) => {
+  const queueAction = async (id: string, flag: '-h' | '-H' | '-d', title: string) => {
     try {
-      await context.runHelper(script, [id]);
+      await context.runCommand(['postsuper', flag, id], { superuser: 'require', err: 'message' });
       context.notify('success', title);
       await load();
     } catch (error) {
@@ -50,7 +82,7 @@ export function QueuePage({ context }: PageProps): React.JSX.Element {
 
   const flushQueue = async () => {
     try {
-      await context.runHelper('queue-flush.sh');
+      await context.runCommand(['postqueue', '-f'], { superuser: 'try', err: 'message' });
       context.notify('success', 'Queue flush requested');
       await load();
     } catch (error) {
@@ -83,9 +115,9 @@ export function QueuePage({ context }: PageProps): React.JSX.Element {
                 <Td dataLabel="Recipients">{(entry.recipients || []).join(', ')}</Td>
                 <Td dataLabel="Size">{entry.size}</Td>
                 <Td dataLabel="Actions">
-                  <Button variant="link" onClick={() => void queueAction('queue-hold.sh', entry.id, `Held ${entry.id}`)}>Hold</Button>
-                  <Button variant="link" onClick={() => void queueAction('queue-release.sh', entry.id, `Released ${entry.id}`)}>Release</Button>
-                  <Button variant="link" isDanger onClick={() => void queueAction('queue-delete.sh', entry.id, `Deleted ${entry.id}`)}>Delete</Button>
+                  <Button variant="link" onClick={() => void queueAction(entry.id, '-h', `Held ${entry.id}`)}>Hold</Button>
+                  <Button variant="link" onClick={() => void queueAction(entry.id, '-H', `Released ${entry.id}`)}>Release</Button>
+                  <Button variant="link" isDanger onClick={() => void queueAction(entry.id, '-d', `Deleted ${entry.id}`)}>Delete</Button>
                 </Td>
               </Tr>
             ))}
