@@ -1,0 +1,25 @@
+:root {
+  color-scheme: light dark;
+}
+
+.cp-sidebar {
+  min-width: 260px;
+}
+
+.cp-toolbar-actions {
+  margin-left: auto;
+}
+
+.cp-log-view {
+  max-height: 28rem;
+  overflow: auto;
+  padding: 1rem;
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-radius: var(--pf-t--global--border--radius--regular);
+}
+
+.cp-mono {
+  font-family: var(--pf-t--global--font--family--mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
