@@ -7,23 +7,29 @@ import { SearchInput } from '@patternfly/react-core/dist/esm/components/SearchIn
 import { FormSelect, FormSelectOption } from '@patternfly/react-core/dist/esm/components/FormSelect/index.js';
 import type { PageProps } from '../types';
 
+interface CockpitStreamProcess {
+  stream: (callback: (chunk: string) => void) => void;
+  catch: (callback: (error: unknown) => void) => void;
+  close?: () => void;
+}
+
 export function LogsPage({ context }: PageProps): React.JSX.Element {
   const [query, setQuery] = React.useState('');
   const [level, setLevel] = React.useState('all');
   const [paused, setPaused] = React.useState(false);
   const [lines, setLines] = React.useState<string[]>([]);
-  const procRef = React.useRef<any>(null);
+  const procRef = React.useRef<CockpitStreamProcess | null>(null);
 
   React.useEffect(() => {
-    const proc = cockpit.spawn(['journalctl', '-u', 'postfix', '-f', '--no-pager'], { superuser: 'try', err: 'message' });
-    procRef.current = proc;
-    proc.stream((chunk: string) => {
+    const journalProcess = cockpit.spawn(['journalctl', '-u', 'postfix', '-f', '--no-pager'], { superuser: 'try', err: 'message' }) as unknown as CockpitStreamProcess;
+    procRef.current = journalProcess;
+    journalProcess.stream((chunk: string) => {
       if (paused) {
         return;
       }
       setLines((prev) => [...prev, ...chunk.split('\n').filter(Boolean)].slice(-2000));
     });
-    proc.catch((error: unknown) => context.notify('danger', 'Log stream failed', String(error)));
+    journalProcess.catch((error: unknown) => context.notify('danger', 'Log stream failed', String(error)));
 
     return () => {
       if (procRef.current?.close) {

@@ -25,6 +25,17 @@ const ENUM_FIELDS: Record<string, string[]> = {
   smtpd_tls_security_level: ['none', 'may', 'encrypt']
 };
 
+const DEFAULT_MASTER_ROW: Record<string, string> = {
+  service: '',
+  type: 'unix',
+  private: '-',
+  unpriv: '-',
+  chroot: '-',
+  wakeup: '-',
+  maxproc: '-',
+  command: ''
+};
+
 interface ConfigState {
   params: Record<string, string>;
   defaults: Record<string, string>;
@@ -141,7 +152,7 @@ export function PostfixConfigPage({ context }: PageProps): React.JSX.Element {
 
       {activeTab === 'master' && (
         <>
-          <Button variant="primary" onClick={() => setMasterRows((prev) => [...prev, { service: '', type: 'unix', private: '-', unpriv: '-', chroot: '-', wakeup: '-', maxproc: '-', command: '' }])}>Add row</Button>{' '}
+          <Button variant="primary" onClick={() => setMasterRows((prev) => [...prev, { ...DEFAULT_MASTER_ROW }])}>Add row</Button>{' '}
           <Button variant="secondary" onClick={() => void saveMaster()}>Save master.cf</Button>
           <Table aria-label="Master table">
             <Thead><Tr><Th>Service</Th><Th>Type</Th><Th>Command</Th><Th>Actions</Th></Tr></Thead>
