@@ -15,7 +15,14 @@ queue_count() {
     postqueue -j | wc -l | tr -d ' '
     return
   fi
-  postqueue -p | awk 'END {print $(NF-1)}'
+  local count summary_line
+  summary_line="$(postqueue -p | tail -n1)"
+  count="$(echo "$summary_line" | grep -Eo '[0-9]+[[:space:]]+Requests?\\.?$' | awk '{print $1}' || true)"
+  if [[ -z "$count" || ! "$count" =~ ^[0-9]+$ ]]; then
+    echo 0
+    return
+  fi
+  echo "$count"
 }
 
 postfix_status="$(systemctl is-active postfix 2>/dev/null || true)"

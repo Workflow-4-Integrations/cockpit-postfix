@@ -1,5 +1,6 @@
 import { createEnhancedTable } from "./table.js";
 import { openModal, openConfirmModal } from "./modal.js";
+import { escapeHtml } from "./utils.js";
 
 export function createAliasesTab(context) {
   const { runHelper, showAlert, notify } = context;
@@ -42,11 +43,11 @@ export function createAliasesTab(context) {
     body.innerHTML = `
       <div class="pf-c-form__group">
         <label class="pf-c-form__label"><span class="pf-c-form__label-text">Source</span></label>
-        <input class="pf-c-form-control" name="source" value="${existing?.source || ""}">
+        <input class="pf-c-form-control" name="source" value="${escapeHtml(existing?.source || "")}">
       </div>
       <div class="pf-c-form__group">
         <label class="pf-c-form__label"><span class="pf-c-form__label-text">Destination</span></label>
-        <input class="pf-c-form-control" name="destination" value="${existing?.destination || ""}">
+        <input class="pf-c-form-control" name="destination" value="${escapeHtml(existing?.destination || "")}">
       </div>
     `;
 
@@ -62,11 +63,8 @@ export function createAliasesTab(context) {
           return false;
         }
         try {
-          if (existing && existing.source !== source) {
+          if (existing) {
             await runHelper("alias-remove.sh", [existing.source]);
-          }
-          if (existing && existing.source === source) {
-            await runHelper("alias-remove.sh", [source]);
           }
           await runHelper("alias-add.sh", [source, destination]);
           notify("success", existing ? `Updated alias ${source}` : `Added alias ${source}`);

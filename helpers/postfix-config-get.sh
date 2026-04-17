@@ -9,8 +9,18 @@ if [[ "$MODE" == "--default" ]]; then
     echo "Usage: $0 --default <param>" >&2
     exit 2
   fi
-  postconf -d "$PARAM" | python3 -c 'import json,sys; line=sys.stdin.read().strip(); value=""; 
-if "=" in line: value=line.split("=",1)[1].strip(); print(json.dumps({"param":line.split("=",1)[0].strip() if "=" in line else "", "value":value}))'
+  postconf -d "$PARAM" | python3 - <<'PY'
+import json
+import sys
+
+line = sys.stdin.read().strip()
+if "=" not in line:
+    print(json.dumps({"param": "", "value": ""}))
+    raise SystemExit(0)
+
+key, value = line.split("=", 1)
+print(json.dumps({"param": key.strip(), "value": value.strip()}))
+PY
   exit 0
 fi
 

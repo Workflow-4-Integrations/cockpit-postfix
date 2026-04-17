@@ -41,12 +41,12 @@ export function openModal({ title, body, confirmText = "Save", cancelText = "Can
 
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
-  return close;
+  return { close, backdrop, modal };
 }
 
 export function openConfirmModal({ title, message, danger = true, confirmText = "Confirm" }) {
   return new Promise((resolve) => {
-    openModal({
+    const handle = openModal({
       title,
       body: `<p>${message}</p>`,
       confirmText,
@@ -57,9 +57,8 @@ export function openConfirmModal({ title, message, danger = true, confirmText = 
       }
     });
 
-    const handle = document.querySelector(".pf-c-backdrop:last-child");
-    if (handle) {
-      handle.querySelector('[data-action="cancel"]').addEventListener("click", () => resolve(false));
+    if (handle?.backdrop) {
+      handle.backdrop.querySelector('[data-action="cancel"]').addEventListener("click", () => resolve(false));
     }
   });
 }

@@ -27,7 +27,7 @@ export function createLogsTab(context) {
 
   let paused = false;
   let follower = null;
-  const lines = [];
+  let lines = [];
 
   function parseLine(raw) {
     const line = String(raw || "").trim();
@@ -41,6 +41,33 @@ export function createLogsTab(context) {
     return { timestamp, message, level, raw: line };
   }
 
+  function highlightMessage(message, query) {
+    if (!query) {
+      return escapeHtml(message);
+    }
+    const source = String(message || "");
+    const lowerSource = source.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    if (!lowerQuery) {
+      return escapeHtml(source);
+    }
+
+    let start = 0;
+    let output = "";
+    while (start < source.length) {
+      const matchIndex = lowerSource.indexOf(lowerQuery, start);
+      if (matchIndex < 0) {
+        output += escapeHtml(source.slice(start));
+        break;
+      }
+      output += escapeHtml(source.slice(start, matchIndex));
+      const matched = source.slice(matchIndex, matchIndex + lowerQuery.length);
+      output += `<mark>${escapeHtml(matched)}</mark>`;
+      start = matchIndex + lowerQuery.length;
+    }
+    return output;
+  }
+
   function append(text) {
     if (paused || !text) {
       return;
@@ -52,7 +79,7 @@ export function createLogsTab(context) {
       }
     });
     if (lines.length > 2000) {
-      lines.splice(0, lines.length - 2000);
+      lines = lines.slice(-2000);
     }
     render();
   }
@@ -79,7 +106,7 @@ export function createLogsTab(context) {
     filtered.slice(-500).forEach((entry) => {
       const tr = document.createElement("tr");
       tr.className = `log-${entry.level}`;
-      const highlighted = search ? entry.message.replaceAll(search, `<mark>${escapeHtml(search)}</mark>`) : escapeHtml(entry.message);
+      const highlighted = highlightMessage(entry.message, search);
       tr.innerHTML = `<td>${escapeHtml(entry.timestamp)}</td><td>${highlighted}</td>`;
       tbody.appendChild(tr);
     });

@@ -106,10 +106,16 @@ function createOrderedListEditor(value = "") {
       up.disabled = index === 0;
       down.disabled = index === items.length - 1;
       up.addEventListener("click", () => {
+        if (index <= 0) {
+          return;
+        }
         [items[index - 1], items[index]] = [items[index], items[index - 1]];
         render();
       });
       down.addEventListener("click", () => {
+        if (index >= items.length - 1) {
+          return;
+        }
         [items[index + 1], items[index]] = [items[index], items[index + 1]];
         render();
       });
@@ -300,7 +306,7 @@ export function createConfigTab(context) {
           next[column] = modal.querySelector(`[name="${column}"]`).value.trim();
         });
         if (!next.service || !next.type) {
-          showAlert("danger", "service and type are required");
+          showAlert("danger", "Service and Type are required");
           return false;
         }
         if (index >= 0) {
@@ -389,7 +395,10 @@ export function createConfigTab(context) {
         tr.innerHTML = `<td>${escapeHtml(key)}</td><td>${escapeHtml(value)}</td><td><div class="actions-inline"><button class="pf-c-button pf-m-link" type="button" data-action="edit">Edit</button><button class="pf-c-button pf-m-link" type="button" data-action="default">Show default</button></div></td>`;
         tr.querySelector('[data-action="edit"]').addEventListener("click", () => {
           const editor = document.createElement("div");
-          editor.innerHTML = `<input class="pf-c-form-control" value="${escapeHtml(value)}">`;
+          const input = document.createElement("input");
+          input.className = "pf-c-form-control";
+          input.value = String(value ?? "");
+          editor.appendChild(input);
           openModal({
             title: `Edit ${key}`,
             body: editor,

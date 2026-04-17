@@ -1,5 +1,6 @@
 import { createEnhancedTable } from "./table.js";
 import { openModal, openConfirmModal } from "./modal.js";
+import { escapeHtml } from "./utils.js";
 
 export function createDomainsTab(context) {
   const { runHelper, showAlert, notify } = context;
@@ -58,7 +59,7 @@ export function createDomainsTab(context) {
 
   function openEditModal(domain) {
     const body = document.createElement("div");
-    body.innerHTML = `<div class="pf-c-form__group"><label class="pf-c-form__label"><span class="pf-c-form__label-text">Domain</span></label><input class="pf-c-form-control" name="domain" value="${domain}"></div>`;
+    body.innerHTML = `<div class="pf-c-form__group"><label class="pf-c-form__label"><span class="pf-c-form__label-text">Domain</span></label><input class="pf-c-form-control" name="domain" value="${escapeHtml(domain)}"></div>`;
     openModal({
       title: `Edit ${domain}`,
       confirmText: "Save",
