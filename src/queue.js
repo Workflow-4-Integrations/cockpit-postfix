@@ -1,85 +1,78 @@
-import { escapeHtml } from "./utils.js";
+import { createEnhancedTable } from "./table.js";
+import { openConfirmModal } from "./modal.js";
 
 export function createQueueTab(context) {
-  const { runHelper, showAlert } = context;
+  const { runHelper, showAlert, notify } = context;
   const root = document.createElement("div");
   root.className = "pf-l-stack pf-m-gutter";
+  root.innerHTML = '<header class="section-header"><h2>Queue</h2><p>Inspect and operate on queued messages.</p></header><div class="actions-inline"><button class="pf-c-button pf-m-primary" type="button" data-action="flush">Flush queue</button><button class="pf-c-button pf-m-secondary" type="button" data-action="refresh">Refresh</button></div>';
 
-  const actions = document.createElement("div");
-  actions.className = "actions-inline";
-  actions.innerHTML = `<button class="pf-c-button pf-m-primary" type="button">Flush queue</button>`;
+  const table = createEnhancedTable({
+    title: "queue",
+    columns: [
+      { label: "ID", key: "id" },
+      { label: "Sender", key: "sender" },
+      { label: "Recipients", key: "recipients" },
+      { label: "Size", key: "size" }
+    ],
+    emptyMessage: "Queue is empty",
+    onBulkDelete: (rows) => bulkDelete(rows),
+    rowActions: [
+      { label: "Hold", onClick: (row) => queueAction("queue-hold.sh", row.id, `Held ${row.id}`) },
+      { label: "Release", onClick: (row) => queueAction("queue-release.sh", row.id, `Released ${row.id}`) },
+      { label: "Delete", variant: "danger", onClick: (row) => queueAction("queue-delete.sh", row.id, `Deleted ${row.id}`) }
+    ]
+  });
 
-  const table = document.createElement("table");
-  table.className = "pf-c-table pf-m-grid-md";
-  table.innerHTML = `
-    <thead>
-      <tr><th>ID</th><th>Sender</th><th>Recipients</th><th>Size</th><th>Actions</th></tr>
-    </thead>
-    <tbody></tbody>
-  `;
+  async function refresh() {
+    try {
+      const out = await runHelper("queue-list.sh");
+      const list = JSON.parse(out || "[]");
+      table.setRows(list.map((item) => ({
+        ...item,
+        recipients: Array.isArray(item.recipients) ? item.recipients.join(", ") : ""
+      })));
+    } catch (error) {
+      showAlert("danger", error.message);
+    }
+  }
 
-  actions.querySelector("button").addEventListener("click", async () => {
+  async function queueAction(script, id, message) {
+    try {
+      await runHelper(script, [id]);
+      notify("success", message);
+      await refresh();
+    } catch (error) {
+      showAlert("danger", error.message);
+    }
+  }
+
+  async function bulkDelete(rows) {
+    const confirmed = await openConfirmModal({ title: "Bulk delete queue entries", message: `Delete ${rows.length} selected queue message(s)?`, confirmText: "Delete selected", danger: true });
+    if (!confirmed) {
+      return;
+    }
+    for (const row of rows) {
+      await queueAction("queue-delete.sh", row.id, `Deleted ${row.id}`);
+    }
+  }
+
+  root.querySelector('[data-action="flush"]').addEventListener("click", async () => {
+    const confirmed = await openConfirmModal({ title: "Flush queue", message: "Flush all queued mail now?", confirmText: "Flush", danger: true });
+    if (!confirmed) {
+      return;
+    }
     try {
       await runHelper("queue-flush.sh");
-      showAlert("success", "Queue flush requested");
+      notify("success", "Queue flush requested");
       await refresh();
     } catch (error) {
       showAlert("danger", error.message);
     }
   });
 
-  async function queueAction(script, id, message) {
-    try {
-      await runHelper(script, [id]);
-      showAlert("success", message);
-      await refresh();
-    } catch (error) {
-      showAlert("danger", error.message);
-    }
-  }
-
-  async function refresh() {
-    try {
-      const out = await runHelper("queue-list.sh");
-      const list = JSON.parse(out || "[]");
-      const tbody = table.querySelector("tbody");
-      tbody.innerHTML = "";
-
-      if (list.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5">Queue is empty</td></tr>`;
-        return;
-      }
-
-      for (const item of list) {
-        const recipients = Array.isArray(item.recipients) ? item.recipients.join(", ") : "";
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${escapeHtml(item.id ?? "")}</td>
-          <td>${escapeHtml(item.sender ?? "")}</td>
-          <td>${escapeHtml(recipients)}</td>
-          <td>${escapeHtml(item.size ?? "")}</td>
-          <td>
-            <div class="actions-inline">
-              <button class="pf-c-button pf-m-secondary pf-m-link" type="button" data-action="hold">Hold</button>
-              <button class="pf-c-button pf-m-secondary pf-m-link" type="button" data-action="release">Release</button>
-              <button class="pf-c-button pf-m-danger pf-m-link" type="button" data-action="delete">Delete</button>
-            </div>
-          </td>
-        `;
-
-        tr.querySelector('[data-action="hold"]').addEventListener("click", () => queueAction("queue-hold.sh", item.id, `Held ${item.id}`));
-        tr.querySelector('[data-action="release"]').addEventListener("click", () => queueAction("queue-release.sh", item.id, `Released ${item.id}`));
-        tr.querySelector('[data-action="delete"]').addEventListener("click", () => queueAction("queue-delete.sh", item.id, `Deleted ${item.id}`));
-        tbody.appendChild(tr);
-      }
-    } catch (error) {
-      showAlert("danger", error.message);
-    }
-  }
-
-  root.appendChild(actions);
-  root.appendChild(table);
+  root.querySelector('[data-action="refresh"]').addEventListener("click", () => refresh());
+  root.appendChild(table.element);
   refresh();
-
   return { element: root };
 }
