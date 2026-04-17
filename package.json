@@ -1,0 +1,29 @@
+{
+  "name": "cockpit-postfix",
+  "description": "Cockpit plugin for Postfix and Dovecot administration",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "./build.js",
+    "watch": "ESBUILD_WATCH='true' ./build.js"
+  },
+  "dependencies": {
+    "@patternfly/patternfly": "6.1.0",
+    "@patternfly/react-core": "6.1.0",
+    "@patternfly/react-icons": "6.1.0",
+    "@patternfly/react-table": "^6.1.0",
+    "argparse": "2.0.1",
+    "esbuild": "0.28.0",
+    "esbuild-sass-plugin": "3.7.0",
+    "gettext-parser": "9.0.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.13",
+    "@types/react-dom": "18.3.1",
+    "typescript": "5.9.3"
+  }
+}
