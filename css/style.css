@@ -1,0 +1,15 @@
+#tab-content {
+  margin-top: 1rem;
+}
+
+.log-view {
+  height: 26rem;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.actions-inline {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
