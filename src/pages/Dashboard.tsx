@@ -24,6 +24,11 @@ interface DashboardData {
   dovecot_version: string;
 }
 
+function parsePostfixVersion(raw: string): string {
+  const match = raw.match(/mail_version\\s*=\\s*(.+)$/m);
+  return match?.[1]?.trim() || '';
+}
+
 async function run(cmd: string[]): Promise<string> {
   try {
     return await cockpit.spawn(cmd, { superuser: 'try', err: 'ignore' });
@@ -38,7 +43,7 @@ async function countFileLines(path: string): Promise<number> {
       ['grep', '-cEv', '^\\s*($|#)', path],
       { superuser: 'try', err: 'ignore' }
     );
-    return parseInt(content.trim(), 10) || 0;
+    return Number.parseInt(content.trim(), 10) || 0;
   } catch {
     return 0;
   }
@@ -75,7 +80,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     mailbox_count: mailboxCount,
     alias_count: aliasCount,
     hostname: hostname.trim(),
-    postfix_version: (postfixVersionRaw.split('=')[1] || '').trim(),
+    postfix_version: parsePostfixVersion(postfixVersionRaw),
     dovecot_version: dovecotVersionRaw.trim(),
   };
 }

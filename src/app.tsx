@@ -90,7 +90,7 @@ export function Application(): React.JSX.Element {
             variant={alert.variant}
             title={alert.title}
             timeout={5000}
-            actionClose={<AlertActionCloseButton onClose={() => setAlerts((prev) => prev.filter((a) => a.id !== alert.id))} />}
+            actionClose={<AlertActionCloseButton onClose={() => setAlerts((prev) => prev.filter((entry) => entry.id !== alert.id))} />}
           >
             {alert.detail}
           </Alert>

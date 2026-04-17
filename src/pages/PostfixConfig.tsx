@@ -167,7 +167,7 @@ export function PostfixConfigPage({ context }: PageProps): React.JSX.Element {
     try {
       await context.runCommand([
         'bash', '-lc',
-        'tmp="$(mktemp)"; cat > "$tmp"; install -m 0644 "$tmp" /etc/postfix/master.cf; rm -f "$tmp"',
+        'tmp="$(mktemp)"; backup="$(mktemp)"; cp -f /etc/postfix/master.cf "$backup" 2>/dev/null || true; cat > "$tmp"; install -m 0644 "$tmp" /etc/postfix/master.cf; if ! postfix check >/dev/null 2>&1; then if [[ -s "$backup" ]]; then install -m 0644 "$backup" /etc/postfix/master.cf; fi; rm -f "$tmp" "$backup"; echo "Invalid master.cf content" >&2; exit 1; fi; rm -f "$tmp" "$backup"',
       ], {
         superuser: 'require',
         err: 'message',

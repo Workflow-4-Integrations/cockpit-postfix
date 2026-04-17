@@ -18,6 +18,7 @@ interface MailboxRow {
 const MAILBOX_MAP = '/etc/postfix/virtual_mailbox_maps';
 const DOVECOT_USERS = '/etc/dovecot/users';
 const VMAIL_ROOT = '/var/vmail';
+const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export function MailboxesPage({ context }: PageProps): React.JSX.Element {
   const [mailboxes, setMailboxes] = React.useState<MailboxRow[]>([]);
@@ -71,14 +72,24 @@ export function MailboxesPage({ context }: PageProps): React.JSX.Element {
 
   const addMailbox = async () => {
     try {
+      const mailboxEmail = email.trim();
+      if (!EMAIL_PATTERN.test(mailboxEmail)) {
+        throw new Error('Invalid mailbox address');
+      }
+      const passwordHash = await context.runCommand([
+        'bash', '-lc',
+        'printf "%s\\n%s\\n" "$1" "$1" | doveadm pw -s SHA512-CRYPT',
+        '--',
+        password
+      ], { superuser: 'require', err: 'message' });
       await context.runCommand([
         'bash', '-lc',
-        'touch "$1" "$2"; hash="$(doveadm pw -s SHA512-CRYPT -p "$4")"; local_part="${3%@*}"; domain_part="${3#*@}"; mailbox_path="${domain_part}/${local_part}/"; mailbox_prefix="$(printf "%s\\t" "$3")"; users_prefix="$(printf "%s:" "$3")"; tmp_map="$(mktemp)"; grep -Fv "$mailbox_prefix" "$1" > "$tmp_map" || true; printf "%s\\t%s\\n" "$3" "$mailbox_path" >> "$tmp_map"; mv "$tmp_map" "$1"; tmp_users="$(mktemp)"; grep -Fv "$users_prefix" "$2" > "$tmp_users" || true; printf "%s:%s::::::\\n" "$3" "$hash" >> "$tmp_users"; mv "$tmp_users" "$2"; postmap "$1"',
+        'touch "$1" "$2"; local_part="${3%@*}"; domain_part="${3#*@}"; mailbox_path="${domain_part}/${local_part}/"; mailbox_prefix="$(printf "%s\\t" "$3")"; users_prefix="$(printf "%s:" "$3")"; tmp_map="$(mktemp)"; grep -Fv "$mailbox_prefix" "$1" > "$tmp_map" || true; printf "%s\\t%s\\n" "$3" "$mailbox_path" >> "$tmp_map"; mv "$tmp_map" "$1"; tmp_users="$(mktemp)"; grep -Fv "$users_prefix" "$2" > "$tmp_users" || true; printf "%s:%s::::::\\n" "$3" "$4" >> "$tmp_users"; mv "$tmp_users" "$2"; postmap "$1"',
         '--',
         MAILBOX_MAP,
         DOVECOT_USERS,
-        email.trim(),
-        password
+        mailboxEmail,
+        passwordHash.trim()
       ], { superuser: 'require', err: 'message' });
       setEmail('');
       setPassword('');
@@ -92,9 +103,12 @@ export function MailboxesPage({ context }: PageProps): React.JSX.Element {
 
   const deleteMailbox = async (value: string) => {
     try {
+      if (!EMAIL_PATTERN.test(value)) {
+        throw new Error('Invalid mailbox address');
+      }
       await context.runCommand([
         'bash', '-lc',
-        'mailbox_prefix="$(printf "%s\\t" "$4")"; users_prefix="$(printf "%s:" "$4")"; if [[ -f "$1" ]]; then tmp_map="$(mktemp)"; grep -Fv "$mailbox_prefix" "$1" > "$tmp_map" || true; mv "$tmp_map" "$1"; postmap "$1"; fi; if [[ -f "$2" ]]; then tmp_users="$(mktemp)"; grep -Fv "$users_prefix" "$2" > "$tmp_users" || true; mv "$tmp_users" "$2"; fi; if [[ "$3" == "--purge" ]]; then local_part="${4%@*}"; domain_part="${4#*@}"; rm -rf "${5}/${domain_part}/${local_part}"; fi',
+        'mailbox_prefix="$(printf "%s\\t" "$4")"; users_prefix="$(printf "%s:" "$4")"; if [[ -f "$1" ]]; then tmp_map="$(mktemp)"; grep -Fv "$mailbox_prefix" "$1" > "$tmp_map" || true; mv "$tmp_map" "$1"; postmap "$1"; fi; if [[ -f "$2" ]]; then tmp_users="$(mktemp)"; grep -Fv "$users_prefix" "$2" > "$tmp_users" || true; mv "$tmp_users" "$2"; fi; if [[ "$3" == "--purge" ]]; then local_part="${4%@*}"; domain_part="${4#*@}"; if [[ "$local_part" =~ ^[A-Za-z0-9._+-]+$ && "$domain_part" =~ ^[A-Za-z0-9.-]+$ ]]; then rm -rf "${5}/${domain_part}/${local_part}"; fi; fi',
         '--',
         MAILBOX_MAP,
         DOVECOT_USERS,
