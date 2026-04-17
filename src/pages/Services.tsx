@@ -11,14 +11,26 @@ interface ServiceStatus {
   enabled: string;
 }
 
+async function getServiceStatus(context: PageProps['context'], service: string): Promise<ServiceStatus> {
+  const [active, enabled] = await Promise.all([
+    context.runCommand(['systemctl', 'is-active', service], { superuser: 'try', err: 'ignore' }),
+    context.runCommand(['systemctl', 'is-enabled', service], { superuser: 'try', err: 'ignore' }),
+  ]);
+
+  return {
+    active: active.trim() || 'unknown',
+    enabled: enabled.trim() || 'unknown'
+  };
+}
+
 export function ServicesPage({ context }: PageProps): React.JSX.Element {
   const [services, setServices] = React.useState<Record<string, ServiceStatus>>({});
 
   const load = React.useCallback(async () => {
     try {
       const entries = await Promise.all(['postfix', 'dovecot'].map(async (service) => {
-        const output = await context.runHelper('service-control.sh', ['status', service]);
-        return [service, JSON.parse(output || '{}')] as const;
+        const status = await getServiceStatus(context, service);
+        return [service, status] as const;
       }));
       setServices(Object.fromEntries(entries));
     } catch (error) {
@@ -32,7 +44,7 @@ export function ServicesPage({ context }: PageProps): React.JSX.Element {
 
   const action = async (service: string, command: string, message: string) => {
     try {
-      await context.runHelper('service-control.sh', [command, service]);
+      await context.runCommand(['systemctl', command, service], { superuser: 'require', err: 'message' });
       context.notify('success', message);
       await load();
     } catch (error) {

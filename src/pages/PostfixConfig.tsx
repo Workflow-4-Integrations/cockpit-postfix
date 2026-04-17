@@ -41,6 +41,67 @@ interface ConfigState {
   defaults: Record<string, string>;
 }
 
+function parsePostconf(output: string): Record<string, string> {
+  const data: Record<string, string> = {};
+  for (const raw of output.split('\n')) {
+    const line = raw.trim();
+    if (!line || !line.includes('=')) {
+      continue;
+    }
+    const [key, ...rest] = line.split('=');
+    data[key.trim()] = rest.join('=').trim();
+  }
+  return data;
+}
+
+function parseMaster(output: string): Array<Record<string, string>> {
+  const rows: Array<Record<string, string>> = [];
+  for (const raw of output.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+    const parts = line.split(/\s+/);
+    if (parts.length < 8) {
+      continue;
+    }
+    const [service, type, privateField, unpriv, chroot, wakeup, maxproc, ...command] = parts;
+    rows.push({
+      service,
+      type,
+      private: privateField,
+      unpriv,
+      chroot,
+      wakeup,
+      maxproc,
+      command: command.join(' ')
+    });
+  }
+  return rows;
+}
+
+function masterToText(rows: Array<Record<string, string>>): string {
+  const lines = ['# Managed by cockpit-postfix'];
+  for (const row of rows) {
+    const service = (row.service || '').trim();
+    const type = (row.type || '').trim();
+    if (!service || !type) {
+      continue;
+    }
+    lines.push([
+      service,
+      type,
+      (row.private || '-').trim() || '-',
+      (row.unpriv || '-').trim() || '-',
+      (row.chroot || '-').trim() || '-',
+      (row.wakeup || '-').trim() || '-',
+      (row.maxproc || '-').trim() || '-',
+      (row.command || '').trim()
+    ].join(' '));
+  }
+  return `${lines.join('\n')}\n`;
+}
+
 export function PostfixConfigPage({ context }: PageProps): React.JSX.Element {
   const [activeTab, setActiveTab] = React.useState('general');
   const [config, setConfig] = React.useState<ConfigState>({ params: {}, defaults: {} });
@@ -50,9 +111,11 @@ export function PostfixConfigPage({ context }: PageProps): React.JSX.Element {
 
   const load = React.useCallback(async (showAll = false) => {
     try {
-      const output = await context.runHelper('postfix-config-get.sh', [showAll ? '--all' : '--non-default']);
-      const parsed = JSON.parse(output || '{}');
-      setConfig({ params: parsed.params || {}, defaults: parsed.defaults || {} });
+      const [currentOutput, defaultOutput] = await Promise.all([
+        context.runCommand(showAll ? ['postconf'] : ['postconf', '-n'], { superuser: 'try', err: 'ignore' }),
+        context.runCommand(['postconf', '-d'], { superuser: 'try', err: 'ignore' })
+      ]);
+      setConfig({ params: parsePostconf(currentOutput), defaults: parsePostconf(defaultOutput) });
     } catch (error) {
       context.notify('danger', 'Failed to load Postfix config', String(error));
     }
@@ -60,8 +123,8 @@ export function PostfixConfigPage({ context }: PageProps): React.JSX.Element {
 
   const loadMaster = React.useCallback(async () => {
     try {
-      const output = await context.runHelper('postfix-master-get.sh');
-      setMasterRows(JSON.parse(output || '[]'));
+      const output = await context.runCommand(['cat', '/etc/postfix/master.cf'], { superuser: 'try', err: 'ignore' });
+      setMasterRows(parseMaster(output));
     } catch (error) {
       context.notify('danger', 'Failed to load master.cf', String(error));
     }
@@ -74,7 +137,9 @@ export function PostfixConfigPage({ context }: PageProps): React.JSX.Element {
 
   const saveFields = async (payload: Record<string, string>) => {
     try {
-      await context.runHelper('postfix-config-set.sh', ['--json', JSON.stringify(payload)]);
+      await Promise.all(Object.entries(payload).map(([key, value]) =>
+        context.runCommand(['postconf', '-e', `${key}=${value}`], { superuser: 'require', err: 'message' })
+      ));
       setPending(true);
       context.notify('success', 'Configuration saved');
       await load();
@@ -85,7 +150,10 @@ export function PostfixConfigPage({ context }: PageProps): React.JSX.Element {
 
   const validateConfig = async (reload = false) => {
     try {
-      await context.runHelper('postfix-check.sh', reload ? ['--reload'] : []);
+      await context.runCommand(['postfix', 'check'], { superuser: 'require', err: 'message' });
+      if (reload) {
+        await context.runCommand(['postfix', 'reload'], { superuser: 'require', err: 'message' });
+      }
       context.notify('success', reload ? 'Postfix reloaded' : 'Configuration validated');
       if (reload) {
         setPending(false);
@@ -97,7 +165,14 @@ export function PostfixConfigPage({ context }: PageProps): React.JSX.Element {
 
   const saveMaster = async () => {
     try {
-      await context.runHelper('postfix-master-set.sh', ['--json', JSON.stringify(masterRows)]);
+      await context.runCommand([
+        'bash', '-lc',
+        'tmp="$(mktemp)"; backup="$(mktemp)"; cp -f /etc/postfix/master.cf "$backup" 2>/dev/null || true; cat > "$tmp"; install -m 0644 "$tmp" /etc/postfix/master.cf; if ! postfix check >/dev/null 2>&1; then if [[ -s "$backup" ]]; then install -m 0644 "$backup" /etc/postfix/master.cf; fi; rm -f "$tmp" "$backup"; echo "Invalid master.cf content" >&2; exit 1; fi; rm -f "$tmp" "$backup"',
+      ], {
+        superuser: 'require',
+        err: 'message',
+        input: masterToText(masterRows)
+      });
       setPending(true);
       context.notify('success', 'master.cf updated');
     } catch (error) {

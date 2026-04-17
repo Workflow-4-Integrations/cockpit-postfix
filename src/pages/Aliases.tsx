@@ -13,6 +13,8 @@ interface AliasRow {
   destination: string;
 }
 
+const ALIAS_FILE = '/etc/postfix/virtual_alias_maps';
+
 export function AliasesPage({ context }: PageProps): React.JSX.Element {
   const [aliases, setAliases] = React.useState<AliasRow[]>([]);
   const [search, setSearch] = React.useState('');
@@ -24,7 +26,12 @@ export function AliasesPage({ context }: PageProps): React.JSX.Element {
 
   const load = React.useCallback(async () => {
     try {
-      const output = await context.runHelper('alias-list.sh');
+      const output = await context.runCommand([
+        'bash', '-lc',
+        'if [[ -f "$1" ]]; then grep -Ev "^\\s*($|#)" "$1" | cut -f1,2; fi',
+        '--',
+        ALIAS_FILE
+      ], { err: 'ignore' });
       const rows = output
         .split('\n')
         .map((line) => line.trim())
@@ -51,7 +58,14 @@ export function AliasesPage({ context }: PageProps): React.JSX.Element {
 
   const addAlias = async () => {
     try {
-      await context.runHelper('alias-add.sh', [source, destination]);
+      await context.runCommand([
+        'bash', '-lc',
+        'touch "$1"; prefix="$(printf "%s\\t" "$2")"; if grep -Fq "$prefix" "$1"; then echo "Alias already exists: $2" >&2; exit 1; fi; printf "%s\\t%s\\n" "$2" "$3" >> "$1"; postmap "$1"',
+        '--',
+        ALIAS_FILE,
+        source.trim(),
+        destination.trim()
+      ], { superuser: 'require', err: 'message' });
       setSource('');
       setDestination('');
       setIsOpen(false);
@@ -64,7 +78,13 @@ export function AliasesPage({ context }: PageProps): React.JSX.Element {
 
   const deleteAlias = async (value: string) => {
     try {
-      await context.runHelper('alias-remove.sh', [value]);
+      await context.runCommand([
+        'bash', '-lc',
+        'if [[ -f "$1" ]]; then tmp="$(mktemp)"; prefix="$(printf "%s\\t" "$2")"; grep -Fv "$prefix" "$1" > "$tmp" || true; mv "$tmp" "$1"; postmap "$1"; fi',
+        '--',
+        ALIAS_FILE,
+        value
+      ], { superuser: 'require', err: 'message' });
       context.notify('success', `Deleted alias ${value}`);
       await load();
     } catch (error) {
