@@ -1,36 +1,40 @@
+import { createDashboardTab } from "./dashboard.js";
 import { createDomainsTab } from "./domains.js";
 import { createMailboxesTab } from "./mailboxes.js";
 import { createAliasesTab } from "./aliases.js";
+import { createConfigTab } from "./config.js";
 import { createQueueTab } from "./queue.js";
 import { createLogsTab } from "./logs.js";
 import { createServicesTab } from "./services.js";
+import { createSidebarNavigation } from "./navigation.js";
+import { createNotifications } from "./notifications.js";
 
 const helperRoot = "/usr/local/lib/cockpit-postfix";
 const cockpitApi = window.cockpit;
 const root = document.getElementById("app-root");
 
 const alertWrap = document.createElement("div");
-const tabsWrap = document.createElement("div");
+const breadcrumb = document.createElement("div");
+breadcrumb.className = "pf-c-breadcrumb";
 const contentWrap = document.createElement("div");
-contentWrap.id = "tab-content";
-root.appendChild(alertWrap);
-root.appendChild(tabsWrap);
-root.appendChild(contentWrap);
+contentWrap.className = "app-content";
+const viewWrap = document.createElement("div");
+viewWrap.id = "tab-content";
 
-function showAlert(variant, message) {
-  const alert = document.createElement("div");
-  alert.className = `pf-c-alert pf-m-${variant}`;
-  const title = document.createElement("div");
-  title.className = "pf-c-alert__title";
-  title.textContent = message;
-  alert.appendChild(title);
-  alertWrap.innerHTML = "";
-  alertWrap.appendChild(alert);
-  window.setTimeout(() => {
-    if (alert.parentElement === alertWrap) {
-      alertWrap.innerHTML = "";
-    }
-  }, 6000);
+const notifications = createNotifications();
+document.body.appendChild(notifications.element);
+
+function showAlert(variant, message, details = "") {
+  alertWrap.innerHTML = `
+    <div class="pf-c-alert pf-m-${variant}">
+      <div class="pf-c-alert__title">${message}</div>
+      ${details ? `<details><summary>Details</summary><pre>${details}</pre></details>` : ""}
+    </div>
+  `;
+}
+
+function notify(variant, message, detail = "") {
+  notifications.notify(variant, message, detail);
 }
 
 function runHelper(script, args = []) {
@@ -43,56 +47,43 @@ function runHelper(script, args = []) {
   });
 }
 
-const context = { runHelper, showAlert, cockpit: cockpitApi };
-const tabs = [
-  { id: "domains", title: "Domains", factory: () => createDomainsTab(context) },
-  { id: "mailboxes", title: "Mailboxes", factory: () => createMailboxesTab(context) },
-  { id: "aliases", title: "Aliases", factory: () => createAliasesTab(context) },
-  { id: "queue", title: "Queue", factory: () => createQueueTab(context) },
-  { id: "logs", title: "Logs", factory: () => createLogsTab(context) },
-  { id: "services", title: "Services", factory: () => createServicesTab(context) }
+const context = { runHelper, showAlert, notify, cockpit: cockpitApi };
+const views = [
+  { id: "dashboard", title: "Dashboard", icon: "🏠", factory: () => createDashboardTab(context) },
+  { id: "domains", title: "Domains", icon: "🌐", factory: () => createDomainsTab(context) },
+  { id: "mailboxes", title: "Mailboxes", icon: "📫", factory: () => createMailboxesTab(context) },
+  { id: "aliases", title: "Aliases", icon: "🔀", factory: () => createAliasesTab(context) },
+  { id: "config", title: "Postfix Configuration", icon: "⚙️", factory: () => createConfigTab(context) },
+  { id: "queue", title: "Queue", icon: "📬", factory: () => createQueueTab(context) },
+  { id: "logs", title: "Logs", icon: "🧾", factory: () => createLogsTab(context) },
+  { id: "services", title: "Services", icon: "🛠", factory: () => createServicesTab(context) }
 ];
 
-const tabNav = document.createElement("nav");
-tabNav.className = "pf-c-tabs";
-const tabList = document.createElement("ul");
-tabList.className = "pf-c-tabs__list";
-tabNav.appendChild(tabList);
-tabsWrap.appendChild(tabNav);
+const sidebar = createSidebarNavigation(views, (id) => renderView(id));
 
 let activeView = null;
 
-function renderTab(tabId) {
-  const tab = tabs.find((entry) => entry.id === tabId) ?? tabs[0];
+function renderView(viewId) {
+  const view = views.find((entry) => entry.id === viewId) ?? views[0];
   if (activeView?.cleanup) {
     activeView.cleanup();
   }
 
-  contentWrap.innerHTML = "";
-  activeView = tab.factory();
-  contentWrap.appendChild(activeView.element);
+  viewWrap.innerHTML = "";
+  activeView = view.factory();
+  viewWrap.appendChild(activeView.element);
 
-  tabList.querySelectorAll("li").forEach((li) => {
-    li.classList.toggle("pf-m-current", li.dataset.tabId === tab.id);
-  });
+  breadcrumb.innerHTML = `<ol class="pf-c-breadcrumb__list"><li class="pf-c-breadcrumb__item"><span class="pf-c-breadcrumb__link">Mail Server</span></li><li class="pf-c-breadcrumb__item pf-m-current"><span class="pf-c-breadcrumb__heading">${view.title}</span></li></ol>`;
+  sidebar.setActive(view.id);
 }
 
-for (const tab of tabs) {
-  const item = document.createElement("li");
-  item.className = "pf-c-tabs__item";
-  item.dataset.tabId = tab.id;
+contentWrap.appendChild(breadcrumb);
+contentWrap.appendChild(viewWrap);
+root.appendChild(alertWrap);
+root.appendChild(sidebar.element);
+root.appendChild(contentWrap);
 
-  const button = document.createElement("button");
-  button.className = "pf-c-tabs__link";
-  button.type = "button";
-  button.textContent = tab.title;
-  button.addEventListener("click", () => renderTab(tab.id));
-
-  item.appendChild(button);
-  tabList.appendChild(item);
-}
-
-renderTab(tabs[0].id);
+renderView("dashboard");
 
 if (!cockpitApi) {
   showAlert("warning", "Cockpit API is unavailable in this context.");

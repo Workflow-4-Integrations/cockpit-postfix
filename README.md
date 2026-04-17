@@ -4,17 +4,47 @@
 
 ## Features
 
-- Domains tab: manage `virtual_mailbox_domains`
-- Mailboxes tab: manage `virtual_mailbox_maps` and Dovecot user passwords
-- Aliases tab: manage `virtual_alias_maps`
-- Queue tab: list, flush, hold/release, and delete queued mail
-- Logs tab: stream `/var/log/mail.log` in real-time
-- Services tab: manage `postfix` and `dovecot` service state and enablement
+- Dashboard overview with service status cards, queue count, quick actions, recent logs, and system info
+- Cockpit-style vertical sidebar navigation with breadcrumbs
+- Domains, Mailboxes, Aliases, and Queue management with:
+  - Search/filter
+  - Sortable columns
+  - Pagination (10/25/50/100)
+  - Empty states
+  - Bulk delete actions
+  - Row kebab action menus
+- Modal-driven add/edit/delete flows with confirmations
+- Toast notifications for operation feedback
+- Improved logs view with:
+  - Color-coded severity
+  - Search and level filters
+  - Pause/resume streaming indicator
+  - Download current log buffer
+- Services tab with running/enabled status badges and quick toggles
+- **Postfix Configuration** tab with:
+  - Full sectioned parameter editing (General, Network, TLS, SASL, Virtual, Restrictions, Limits, Queue, Transport, Milter)
+  - Ordered-list editing for SMTP restriction policies
+  - TLS status indicator
+  - `master.cf` table editor with add/edit/remove and syntax validation
+  - Raw `postconf`/`postconf -n` view with search, inline edit, and per-parameter default display
+  - Pending changes banner with validate/reload actions
+
+## Helper scripts
+
+New helper scripts are installed to `/usr/local/lib/cockpit-postfix/`:
+
+- `dashboard-stats.sh`
+- `mailbox-quota.sh`
+- `postfix-config-get.sh`
+- `postfix-config-set.sh`
+- `postfix-master-get.sh`
+- `postfix-master-set.sh`
+- `postfix-check.sh`
 
 ## Prerequisites
 
 - Cockpit installed and running
-- Postfix installed with virtual mailbox configuration
+- Postfix installed
 - Dovecot installed
 - Root privileges through Cockpit for helper script execution
 - Expected files:
@@ -41,17 +71,6 @@ Then open Cockpit and use **Mail Server** from the tools menu.
 ```bash
 make uninstall
 ```
-
-## Configuration assumptions
-
-- Postfix map files are text files that are rebuilt with `postmap` after changes.
-- Mailbox map entries are written as `<email>\t<domain>/<user>/`.
-- Dovecot user records are managed in `/etc/dovecot/users` using `doveadm pw` generated hashes.
-- Queue operations use `postqueue` and `postsuper`.
-
-## Screenshots
-
-- Example UI screenshot: https://github.com/user-attachments/assets/bf1c1e29-e49f-4368-b32e-e7ae05f722b3
 
 ## License
 

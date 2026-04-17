@@ -1,88 +1,115 @@
+import { createEnhancedTable } from "./table.js";
+import { openModal, openConfirmModal } from "./modal.js";
 import { escapeHtml } from "./utils.js";
 
 export function createAliasesTab(context) {
-  const { runHelper, showAlert } = context;
+  const { runHelper, showAlert, notify } = context;
   const root = document.createElement("div");
   root.className = "pf-l-stack pf-m-gutter";
+  root.innerHTML = '<header class="section-header"><h2>Aliases</h2><p>Manage source and destination alias mappings.</p></header><div class="actions-inline"><button class="pf-c-button pf-m-primary" type="button" data-action="add">Add alias</button></div>';
 
-  const form = document.createElement("form");
-  form.className = "pf-c-form pf-l-flex pf-m-align-items-flex-end";
-  form.innerHTML = `
-    <div class="pf-c-form__group">
-      <label class="pf-c-form__label" for="alias-source"><span class="pf-c-form__label-text">Source</span></label>
-      <input class="pf-c-form-control" id="alias-source" name="source" required placeholder="info@example.com">
-    </div>
-    <div class="pf-c-form__group">
-      <label class="pf-c-form__label" for="alias-destination"><span class="pf-c-form__label-text">Destination</span></label>
-      <input class="pf-c-form-control" id="alias-destination" name="destination" required placeholder="user@example.com">
-    </div>
-    <div class="pf-c-form__group">
-      <button class="pf-c-button pf-m-primary" type="submit">Add alias</button>
-    </div>
-  `;
-
-  const table = document.createElement("table");
-  table.className = "pf-c-table pf-m-grid-md";
-  table.innerHTML = `
-    <thead>
-      <tr><th>Source</th><th>Destination</th><th>Actions</th></tr>
-    </thead>
-    <tbody></tbody>
-  `;
+  const table = createEnhancedTable({
+    title: "aliases",
+    columns: [
+      { label: "Source", key: "source" },
+      { label: "Destination", key: "destination" }
+    ],
+    emptyMessage: "No aliases configured yet",
+    emptyActionLabel: "Add alias",
+    onEmptyAction: () => openEditModal(),
+    onBulkDelete: (rows) => bulkDelete(rows),
+    rowActions: [
+      { label: "Edit", onClick: (row) => openEditModal(row) },
+      { label: "Delete", variant: "danger", onClick: (row) => removeAlias(row.source) }
+    ]
+  });
 
   async function refresh() {
     try {
       const out = await runHelper("alias-list.sh");
-      const tbody = table.querySelector("tbody");
-      tbody.innerHTML = "";
-      const rows = out.split("\n").map((line) => line.trim()).filter(Boolean);
-
-      if (rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="3">No aliases configured</td></tr>`;
-        return;
-      }
-
-      for (const line of rows) {
+      const rows = out.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
         const [source, destination] = line.split("\t");
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${escapeHtml(source ?? "")}</td><td>${escapeHtml(destination ?? "")}</td><td><button class="pf-c-button pf-m-danger pf-m-link" type="button">Remove</button></td>`;
-        tr.querySelector("button").addEventListener("click", async () => {
-          if (!window.confirm(`Remove alias ${source}?`)) {
-            return;
-          }
-          try {
-            await runHelper("alias-remove.sh", [source]);
-            showAlert("success", `Removed alias ${source}`);
-            await refresh();
-          } catch (error) {
-            showAlert("danger", error.message);
-          }
-        });
-        tbody.appendChild(tr);
-      }
+        return { id: source, source, destination };
+      });
+      table.setRows(rows);
     } catch (error) {
       showAlert("danger", error.message);
     }
   }
 
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const data = new FormData(form);
-    const source = data.get("source").toString().trim();
-    const destination = data.get("destination").toString().trim();
+  function openEditModal(existing = null) {
+    const body = document.createElement("div");
+    body.className = "pf-c-form section-grid";
+    body.innerHTML = `
+      <div class="pf-c-form__group">
+        <label class="pf-c-form__label"><span class="pf-c-form__label-text">Source</span></label>
+        <input class="pf-c-form-control" name="source" value="${escapeHtml(existing?.source || "")}">
+      </div>
+      <div class="pf-c-form__group">
+        <label class="pf-c-form__label"><span class="pf-c-form__label-text">Destination</span></label>
+        <input class="pf-c-form-control" name="destination" value="${escapeHtml(existing?.destination || "")}">
+      </div>
+    `;
 
+    openModal({
+      title: existing ? `Edit alias ${existing.source}` : "Add alias",
+      confirmText: existing ? "Save" : "Add",
+      body,
+      onConfirm: async ({ modal }) => {
+        const source = modal.querySelector('[name="source"]').value.trim();
+        const destination = modal.querySelector('[name="destination"]').value.trim();
+        if (!source || !destination) {
+          showAlert("danger", "Source and destination are required.");
+          return false;
+        }
+        try {
+          if (existing) {
+            await runHelper("alias-remove.sh", [existing.source]);
+          }
+          await runHelper("alias-add.sh", [source, destination]);
+          notify("success", existing ? `Updated alias ${source}` : `Added alias ${source}`);
+          await refresh();
+        } catch (error) {
+          showAlert("danger", error.message);
+          return false;
+        }
+        return true;
+      }
+    });
+  }
+
+  async function removeAlias(source) {
+    const confirmed = await openConfirmModal({ title: "Delete alias", message: `Delete alias ${source}?`, confirmText: "Delete" });
+    if (!confirmed) {
+      return;
+    }
     try {
-      await runHelper("alias-add.sh", [source, destination]);
-      form.reset();
-      showAlert("success", `Added alias ${source}`);
+      await runHelper("alias-remove.sh", [source]);
+      notify("success", `Deleted alias ${source}`);
       await refresh();
     } catch (error) {
       showAlert("danger", error.message);
     }
-  });
+  }
 
-  root.appendChild(form);
-  root.appendChild(table);
+  async function bulkDelete(rows) {
+    const confirmed = await openConfirmModal({ title: "Bulk delete", message: `Delete ${rows.length} selected alias(es)?`, confirmText: "Delete selected" });
+    if (!confirmed) {
+      return;
+    }
+    for (const row of rows) {
+      try {
+        await runHelper("alias-remove.sh", [row.source]);
+      } catch (error) {
+        showAlert("danger", error.message);
+      }
+    }
+    notify("success", `Deleted ${rows.length} alias(es)`);
+    await refresh();
+  }
+
+  root.querySelector('[data-action="add"]').addEventListener("click", () => openEditModal());
+  root.appendChild(table.element);
   refresh();
 
   return { element: root };
