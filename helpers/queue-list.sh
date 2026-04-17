@@ -6,6 +6,15 @@ if postqueue -j >/dev/null 2>&1; then
 import json
 import sys
 
+def normalize_recipients(recipients):
+    normalized = []
+    for recipient in recipients:
+        if isinstance(recipient, dict):
+            normalized.append(recipient.get("address", ""))
+        else:
+            normalized.append(str(recipient))
+    return normalized
+
 items = []
 for line in sys.stdin:
     line = line.strip()
@@ -19,7 +28,7 @@ for line in sys.stdin:
         "id": entry.get("queue_id", ""),
         "sender": entry.get("sender", ""),
         "size": entry.get("message_size", ""),
-        "recipients": [r.get("address", "") if isinstance(r, dict) else str(r) for r in entry.get("recipients", [])],
+        "recipients": normalize_recipients(entry.get("recipients", [])),
     })
 
 print(json.dumps(items))

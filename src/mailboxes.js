@@ -21,6 +21,22 @@ export function createMailboxesTab(context) {
     </div>
   `;
 
+  const resetForm = document.createElement("form");
+  resetForm.className = "pf-c-form pf-l-flex pf-m-align-items-flex-end";
+  resetForm.innerHTML = `
+    <div class="pf-c-form__group">
+      <label class="pf-c-form__label" for="reset-email"><span class="pf-c-form__label-text">Reset mailbox</span></label>
+      <input class="pf-c-form-control" id="reset-email" name="email" required placeholder="user@example.com">
+    </div>
+    <div class="pf-c-form__group">
+      <label class="pf-c-form__label" for="reset-password"><span class="pf-c-form__label-text">New password</span></label>
+      <input class="pf-c-form-control" id="reset-password" name="password" type="password" required>
+    </div>
+    <div class="pf-c-form__group">
+      <button class="pf-c-button pf-m-secondary" type="submit">Apply reset</button>
+    </div>
+  `;
+
   const table = document.createElement("table");
   table.className = "pf-c-table pf-m-grid-md";
   table.innerHTML = `
@@ -30,12 +46,7 @@ export function createMailboxesTab(context) {
     <tbody></tbody>
   `;
 
-  async function resetPassword(email) {
-    const password = window.prompt(`Enter a new password for ${email}:`);
-    if (!password) {
-      return;
-    }
-
+  async function resetPassword(email, password) {
     try {
       await runHelper("mailbox-add.sh", ["--reset", email, password]);
       showAlert("success", `Password updated for ${email}`);
@@ -68,7 +79,11 @@ export function createMailboxesTab(context) {
           </td>
         `;
 
-        tr.querySelector('[data-action="reset"]').addEventListener("click", () => resetPassword(mailbox));
+        tr.querySelector('[data-action="reset"]').addEventListener("click", () => {
+          resetForm.querySelector('[name="email"]').value = mailbox;
+          resetForm.querySelector('[name="password"]').value = "";
+          resetForm.querySelector('[name="password"]').focus();
+        });
         tr.querySelector('[data-action="remove"]').addEventListener("click", async () => {
           const purge = window.confirm(`Delete mailbox ${mailbox} and remove mailbox directory?`);
           try {
@@ -103,7 +118,21 @@ export function createMailboxesTab(context) {
     }
   });
 
+  resetForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = new FormData(resetForm);
+    const email = data.get("email").toString().trim();
+    const password = data.get("password").toString();
+    if (!email || !password) {
+      showAlert("danger", "Email and password are required for reset.");
+      return;
+    }
+    await resetPassword(email, password);
+    resetForm.reset();
+  });
+
   root.appendChild(form);
+  root.appendChild(resetForm);
   root.appendChild(table);
   refresh();
 

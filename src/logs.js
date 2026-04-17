@@ -1,5 +1,6 @@
 export function createLogsTab(context) {
   const { showAlert, cockpit } = context;
+  const MAIL_LOG_PATH = "/var/log/mail.log";
   const root = document.createElement("div");
   root.className = "pf-l-stack pf-m-gutter";
 
@@ -31,7 +32,7 @@ export function createLogsTab(context) {
       return;
     }
     try {
-      const lines = await cockpit.spawn(["tail", "-n", "100", "/var/log/mail.log"], {
+      const lines = await cockpit.spawn(["tail", "-n", "100", MAIL_LOG_PATH], {
         superuser: "require",
         err: "message"
       });
@@ -46,7 +47,7 @@ export function createLogsTab(context) {
     if (!cockpit) {
       return;
     }
-    follower = cockpit.spawn(["tail", "-f", "/var/log/mail.log"], {
+    follower = cockpit.spawn(["tail", "-f", MAIL_LOG_PATH], {
       superuser: "require",
       err: "message"
     });
